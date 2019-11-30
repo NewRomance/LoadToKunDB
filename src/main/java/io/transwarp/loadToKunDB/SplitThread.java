@@ -16,7 +16,7 @@ public class SplitThread extends Thread {
 
     private final byte[] lineEnd;
     private final byte[] fieldTerminator;
-    private final int enclosedCharLength;
+    private final byte[] enclosedChar;
 
     private final int shardNum;
     private final String errorDir;
@@ -37,7 +37,7 @@ public class SplitThread extends Thread {
 
         this.lineEnd = inputConfig.format.linesTerminatedBy.getBytes(inputConfig.encoding);
         this.fieldTerminator = inputConfig.format.fieldsTerminatedBy.getBytes(inputConfig.encoding);
-        this.enclosedCharLength = inputConfig.format.enclosedChar.getBytes(inputConfig.encoding).length;
+        this.enclosedChar = inputConfig.format.enclosedChar.getBytes(inputConfig.encoding);
 
         this.shardNum = outputConfig.shardNum;
         this.errorDir = outputConfig.errorDir;
@@ -103,7 +103,7 @@ public class SplitThread extends Thread {
                         if (delimCount+1 != columnNum) {
                             ++errorLineNum;
                             // TODO put into error file
-                            errorFile.write(bytes);
+                            errorFile.write(bytes,0,size);
                         }
 
                         if (shardKeyColumnIndex == columnNum - 1) {
@@ -112,11 +112,15 @@ public class SplitThread extends Thread {
                         }
 
                         // TODO calc md5 and write shard file
-                        shardKeyColumnSize -= 2 * enclosedCharLength;
-                        if (shardKeyColumnSize < 0) shardKeyColumnSize = 0;
-
+                        // trim enclosedChar if it exists.
+                        if (enclosedChar.length != 0
+                                && ByteArrayUtil.matchesAt(bytes,shardKeyColumnFrom,enclosedChar)
+                                && ByteArrayUtil.matchesAt(bytes,shardKeyColumnFrom + shardKeyColumnSize - enclosedChar.length,enclosedChar)){
+                            shardKeyColumnSize -= 2 * enclosedChar.length;
+                            shardKeyColumnFrom += enclosedChar.length;
+                        }
                         byte[] shardKeyColumn = new byte[shardKeyColumnSize];
-                        System.arraycopy(bytes,shardKeyColumnFrom + enclosedCharLength,shardKeyColumn,0,shardKeyColumnSize);
+                        System.arraycopy(bytes,shardKeyColumnFrom,shardKeyColumn,0,shardKeyColumnSize);
 
                         bosArray[shardEvaluater.calculateShard(shardKeyColumn)].write(bytes,0,size);
 

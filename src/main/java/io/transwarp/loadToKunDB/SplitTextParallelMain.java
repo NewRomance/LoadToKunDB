@@ -23,6 +23,17 @@ public class SplitTextParallelMain {
         String encoding = inputConfig.encoding;
         byte[] lineEnd = inputConfig.format.linesTerminatedBy.getBytes(encoding);
 
+        String errorDir = outputConfig.errorDir;
+        String[] shardDirs = outputConfig.shardDirs;
+        // create outputDirs if they don't exist.
+        for (int i=0; i<shardDirs.length+1; ++i){
+            String fileDir = i==shardDirs.length?errorDir:shardDirs[i];
+            File file = new File(fileDir);
+            if (!file.isDirectory()){
+                file.mkdirs();
+            }
+        }
+
         ObjectPool<LineList> pool = new GenericObjectPool<>(new LineListFactory(runConfig.lineListSize, runConfig.lineBufSize));
         LineList lineList = null;
 
@@ -33,7 +44,6 @@ public class SplitTextParallelMain {
         // TODO DEBUG
       //  int splitThreadNum = 1;
         List<BlockingQueue<LineList>> splitQueues = new ArrayList<>();
-
         // read and process src text file
         try (InputStream inputStream = new FileInputStream(inputConfig.filePath)) {
             for (int i=0; i<splitThreadNum; ++i) {
