@@ -1,0 +1,26 @@
+input:
+  filePath: /home/transwarp/data/dwzc.twb_m_dm_device.txt
+  encoding: UTF-8
+  columnNum: 66
+  shardKeyColumnIndex: 0 # count start from 0
+  format:
+    linesTerminatedBy: "\n"
+    fieldsTerminatedBy: "\u007f"
+
+run:
+  readBufSize: 65536
+  lineBufSize: 65536
+  lineListSize: 16
+  # thread pool size: max(ceil(available_processors * factor), 1)
+  splitParallelFactor: 0.8
+  splitQueueSize: 64
+
+output:
+  shardNum: 4
+  shardDirs: # dir num should == shardNum
+    - /mnt/disk3/sbtest/shard0
+    - /mnt/disk5/sbtest/shard1
+    - /mnt/disk5/sbtest/shard2
+    - /mnt/disk5/sbtest/shard3
+  errorDir: /mnt/disk4/sbtest/error
+  # hashAlgorithm: binary_md5
