@@ -15,6 +15,7 @@ public class SplitTextConfig {
     public static class FormatConfig {
       public String linesTerminatedBy;
       public String fieldsTerminatedBy;
+      public String enclosedChar;
     }
   }
 

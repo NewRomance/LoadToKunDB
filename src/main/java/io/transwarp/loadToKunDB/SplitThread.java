@@ -2,18 +2,25 @@ package io.transwarp.loadToKunDB;
 
 import org.apache.commons.pool2.ObjectPool;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.io.*;
+
 import java.util.concurrent.BlockingQueue;
 
 public class SplitThread extends Thread {
     private final BlockingQueue<LineList> queue;
     private final ObjectPool<LineList> pool;
     private final int id;
+
+    private final int shardKeyColumnIndex;
+    private final int columnNum;
+
     private final byte[] lineEnd;
-    private final SplitTextConfig.InputConfig inputConfig;
-    private final SplitTextConfig.OutputConfig outputConfig;
+    private final byte[] fieldTerminator;
+    private final int enclosedCharLength;
+
+    private final int shardNum;
+    private final String errorDir;
+    private final String[] shardDirs;
 
     public SplitThread(
             BlockingQueue<LineList> queue,
@@ -24,15 +31,24 @@ public class SplitThread extends Thread {
         this.queue = queue;
         this.pool = pool;
         this.id = id;
-        this.inputConfig = inputConfig;
-        this.outputConfig = outputConfig;
-        lineEnd = inputConfig.format.linesTerminatedBy.getBytes(inputConfig.encoding);
+
+        this.shardKeyColumnIndex = inputConfig.shardKeyColumnIndex;
+        this.columnNum = inputConfig.columnNum;
+
+        this.lineEnd = inputConfig.format.linesTerminatedBy.getBytes(inputConfig.encoding);
+        this.fieldTerminator = inputConfig.format.fieldsTerminatedBy.getBytes(inputConfig.encoding);
+        this.enclosedCharLength = inputConfig.format.enclosedChar.getBytes(inputConfig.encoding).length;
+
+        this.shardNum = outputConfig.shardNum;
+        this.errorDir = outputConfig.errorDir;
+        this.shardDirs = outputConfig.shardDirs;
+
         setName("split-thread-" + id);
     }
 
     @Override
     public void run() {
-        try {
+        try(FileOutputStream errorFile = new FileOutputStream(this.errorDir+"/"+getName()+".txt")) {
             System.out.println("split thread " + id + " started");
 
             long start = System.currentTimeMillis();
@@ -40,7 +56,17 @@ public class SplitThread extends Thread {
 
             long processTime = 0;
 
-            ShardEvaluater shardEvaluater = new ShardEvaluater(outputConfig.shardNum);
+            ShardEvaluater shardEvaluater = new ShardEvaluater(shardNum);
+
+            /**
+             * open totalShardNum files
+             * */
+            BufferedOutputStream[] bosArray = new BufferedOutputStream[this.shardNum];
+            for(int i = 0 ; i < bosArray.length; i++){
+                String shardfilename = this.shardDirs[i] +"/"+getName()+".txt";
+                bosArray[i] = new BufferedOutputStream(new FileOutputStream(shardfilename), (1<<20) * 16) ;
+            }
+
             while (true) {
                 LineList lineList = null;
                 try {
@@ -57,9 +83,6 @@ public class SplitThread extends Thread {
                         Line line = lineList.lines[i];
                         byte[] bytes = line.bytes;
                         int size = line.size;
-                        byte[] fieldTerminator = inputConfig.format.fieldsTerminatedBy.getBytes(inputConfig.encoding);
-                        int shardKeyColumnIndex = inputConfig.shardKeyColumnIndex;
-                        int columnNum = inputConfig.columnNum;
 
                         int delimCount = 0;
                         int shardKeyColumnFrom = 0, shardKeyColumnSize = 0;
@@ -80,7 +103,7 @@ public class SplitThread extends Thread {
                         if (delimCount+1 != columnNum) {
                             ++errorLineNum;
                             // TODO put into error file
-
+                            errorFile.write(bytes);
                         }
 
                         if (shardKeyColumnIndex == columnNum - 1) {
@@ -89,13 +112,17 @@ public class SplitThread extends Thread {
                         }
 
                         // TODO calc md5 and write shard file
+                        shardKeyColumnSize -= 2 * enclosedCharLength;
+                        if (shardKeyColumnSize < 0) shardKeyColumnSize = 0;
+
                         byte[] shardKeyColumn = new byte[shardKeyColumnSize];
-                        System.arraycopy(bytes,shardKeyColumnFrom,shardKeyColumn,0,shardKeyColumnSize);
+                        System.arraycopy(bytes,shardKeyColumnFrom + enclosedCharLength,shardKeyColumn,0,shardKeyColumnSize);
 
-                        int shardIndex=shardEvaluater.calculateShard(shardKeyColumn);
+                        bosArray[shardEvaluater.calculateShard(shardKeyColumn)].write(bytes,0,size);
 
-
-                        ++lineNum;
+                        if(++lineNum % 10000 == 0) {
+                            System.out.print(".");
+                        }
                     }
 
                     processTime += System.currentTimeMillis() - processStart;
@@ -112,11 +139,19 @@ public class SplitThread extends Thread {
                 }
             }
 
+            /**
+             * close totalShardNum files
+             * */
+            for(int i = 0 ; i < bosArray.length; i++){
+                bosArray[i].close();
+            }
+
             long took = System.currentTimeMillis() - start;
             System.out.println("split thread " + id + " processed " + lineNum + " lines in " +
                     took + " ms = " + (lineNum * 1000 / took) + " lines/s (" + errorLineNum + " error lines)" +
                     " , processTime "+ processTime +"ms");
-        } catch (InterruptedException | UnsupportedEncodingException e) {
+
+        } catch (InterruptedException | IOException e) {
             e.printStackTrace();
         }
     }

@@ -56,6 +56,10 @@ public class SplitTextParallelMain {
             int lineCur = 0;
             while ((n = inputStream.read(buf)) != -1) {
                 for (int i=0; i<n; ++i) {
+                    if (lineCur >= runConfig.lineBufSize) {
+                        System.out.println("The current line is too long to be put into the lineBuffer, please set the lineBufSize more bigger.");
+                        System.exit(0);
+                    }
                     lineBuf[lineCur] = buf[i];
 
                     boolean isEnd = lineBuf[lineCur] == lineEnd[lineEnd.length-1] &&
@@ -91,9 +95,8 @@ public class SplitTextParallelMain {
             }
 
             long took = System.currentTimeMillis() - start;
-            System.out.println("main thread " + lineNum + " lines / " + took + " ms = " + 1000*lineNum/took + " lines/s");
+            System.out.println("\nmain thread " + lineNum + " lines / " + took + " ms = " + 1000*lineNum/took + " lines/s");
 
-            // TODO check if first lineBufSize bytes contains line separator
             // TODO expand linebuf if line
 
         } finally {
@@ -104,8 +107,6 @@ public class SplitTextParallelMain {
                 queue.put(poisonPill);
             }
         }
-
-
     }
 
     private static SplitTextConfig loadConfig(String confFilePath) throws IOException {
