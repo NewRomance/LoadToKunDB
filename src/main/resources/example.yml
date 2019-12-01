@@ -1,7 +1,7 @@
 input:
-  filePath: D:\ideaWorkSpace\splitIntoShards\loadToKunDB\data\dwzc.twb_m_dm_device.txt.x20
+  filePath: /home/xinhui/data/dwzc.twb_m_dm_base_voltage.utf8.x2048.txt
   encoding: UTF-8
-  columnNum: 66
+  columnNum: 10
   shardKeyColumnIndex: 0 # count start from 0
   format:
     linesTerminatedBy: "\n"
@@ -10,7 +10,7 @@ input:
 
 run:
   readBufSize: 65536
-  lineBufSize: 1
+  lineBufSize: 65536
   lineListSize: 16
   # thread pool size: max(ceil(available_processors * factor), 1)
   splitParallelFactor: 0.8
@@ -18,10 +18,48 @@ run:
 
 output:
   shardNum: 4
-  shardDirs: # dir num should == shardNum
-    - C:\outputDir\shard0
-    - C:\outputDir\shard1
-    - C:\outputDir\shard2
-    - C:\outputDir\shard3
-  errorDir: C:\outputDir\error
+  shardDirs: # dir num should == shardNum; suggest put in different disks, SSD better
+    - /mnt/disk5/kunsplit/shard0
+    - /mnt/disk4/kunsplit/shard1
+    - /mnt/disk3/kunsplit/shard2
+    - /mnt/disk2/kunsplit/shard3
+  segmentSize: 209715200
+  errorDir: /mnt/disk1/sbtest/error
   # hashAlgorithm: binary_md5
+
+insert:
+  shards: # suggest bufDir on SSD
+    - masterHost: node01
+      bufDir: /mnt/disk4/kunload/shard0
+      mysqlPort: 14100
+    - masterHost: node02
+      bufDir: /mnt/disk5/kunload/shard1
+      mysqlPort: 14200
+    - masterHost: node03
+      bufDir: /mnt/disk4/kunload/shard2
+      mysqlPort: 14300
+    - masterHost: node04
+      bufDir: /mnt/disk5/kunload/shard3
+      mysqlPort: 14400
+
+  # no-password SSH login should be confiured; change username below to what you configured
+  sshCmd: |
+    ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey root@${host} << EOF
+    ${command}
+    EOF
+  scpCmd: scp -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey ${fromFile} root@${host}:${toFile}
+
+  # configure user and password below
+  mysqlCmd: mysql --host=${host} --port=${port} --user=root --password=123456 --execute="${sql}"
+  # configure parameters below
+  sql: |
+    LOAD DATA
+        INFILE '${infile}'
+        INTO TABLE vt_kundb1.twb_m_dm_base_voltage
+        CHARACTER SET 'utf8mb4'
+        FIELDS
+            TERMINATED BY x'7f'
+            OPTIONALLY ENCLOSED BY ''
+        LINES
+            TERMINATED BY '\n'
+    ;
