@@ -26,6 +26,7 @@ public class SplitThread extends Thread {
     private final String errorDir;
     private final String[] shardDirs;
     private final long segmentSize;
+    private final int writeBufSize;
 
     private final ExecutorService insertPool;
 
@@ -53,6 +54,7 @@ public class SplitThread extends Thread {
         this.errorDir = outputConfig.errorDir;
         this.shardDirs = outputConfig.shardDirs;
         this.segmentSize = outputConfig.segmentSize;
+        this.writeBufSize = outputConfig.writeBufSize;
 
         this.insertConfig = insertConfig;
 
@@ -84,7 +86,7 @@ public class SplitThread extends Thread {
             int[] segIndexArray = new int[this.shardNum];
             for(int i = 0 ; i < bosArray.length; i++){
                 String shardfilename = getShardFilePath(i, 0);
-                bosArray[i] = new BufferedOutputStream(new FileOutputStream(shardfilename), (1<<20) * 16) ;
+                bosArray[i] = new BufferedOutputStream(new FileOutputStream(shardfilename), this.writeBufSize) ;
             }
 
             while (true) {
@@ -157,13 +159,12 @@ public class SplitThread extends Thread {
                             insertPool.submit(new InsertRunnable(
                                     insertConfig,
                                     getShardFilePath(shardId, segIndexArray[shardId]),
-                                    shardId,
-                                    "split-thread-" + id + "-shard-" + shardId + "-segment-" + segIndexArray[shardId] + ".txt"));
+                                    shardId));
 
                             segIndexArray[shardId] += 1;
                             segSizeArray[shardId] = 0;
                             String shardFileName = getShardFilePath(shardId, segIndexArray[shardId]);
-                            bosArray[shardId] = new BufferedOutputStream(new FileOutputStream(shardFileName), (1<<20) * 16) ;
+                            bosArray[shardId] = new BufferedOutputStream(new FileOutputStream(shardFileName), this.writeBufSize) ;
                         }
                     }
 
@@ -193,8 +194,7 @@ public class SplitThread extends Thread {
                     insertPool.submit(new InsertRunnable(
                         insertConfig,
                         getShardFilePath(i, segIndexArray[i]),
-                        i,
-                        "split-thread-" + id + "-shard-" + i + "-segment-" + segIndexArray[i] + ".txt"));
+                        i));
                 }
             }
             insertPool.shutdown();
@@ -217,17 +217,14 @@ public class SplitThread extends Thread {
         private final SplitTextConfig.InsertConfig insertConfig;
         private final String fromFile;
         private final int shardId;
-        private final String toFileName;
 
         public InsertRunnable(
                 SplitTextConfig.InsertConfig insertConfig,
                 String fromFile,
-                int shardId,
-                String toFileName) {
+                int shardId) {
             this.insertConfig = insertConfig;
             this.fromFile = fromFile;
             this.shardId = shardId;
-            this.toFileName = toFileName;
         }
 
         @Override
@@ -236,21 +233,6 @@ public class SplitThread extends Thread {
 
             SplitTextConfig.InsertConfig.Shard shard = insertConfig.shards.get(shardId);
             String masterHost = shard.masterHost;
-        //    String toFile = shard.bufDir + "/" + toFileName;
-
-          //  String sshTpl = insertConfig.sshCmd.replace("${host}", masterHost);
-          //  String sshTpl = insertConfig.sshCmd.replace("${host}", "172.26.0.110");
-
-            // remote make dir
-          //  String mkDirCmd = "mkdir -p " + shard.bufDir;
-          //  execCommand(sshTpl.replace("${command}", mkDirCmd));
-
-            // scp
-//            String scpCmd = insertConfig.scpCmd
-//                .replace("${fromFile}", fromFile)
-//                .replace("${host}", "172.26.0.110")
-//                .replace("${toFile}", toFile);
-//            execCommand(scpCmd);
 
             // execute load data sql
             String sql = insertConfig.sql.replace("${infile}", fromFile);

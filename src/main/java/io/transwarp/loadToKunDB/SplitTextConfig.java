@@ -34,19 +34,17 @@ public class SplitTextConfig {
     public int shardNum;
     public String[] shardDirs;
     public long segmentSize;
+    public int writeBufSize;
     public String errorDir;
   }
 
   public static class InsertConfig {
     public List<Shard> shards;
-    public String sshCmd;
-    public String scpCmd;
     public String mysqlCmd;
     public String sql;
 
     public static class Shard {
       public String masterHost;
-      public String bufDir;
       public int mysqlPort;
     }
   }

@@ -24,30 +24,20 @@ output:
     - /mnt/disk3/kunsplit/shard2
     - /mnt/disk2/kunsplit/shard3
   segmentSize: 209715200
+  writeBufSize: 16777216
   errorDir: /mnt/disk1/kunsplit/error
   # hashAlgorithm: binary_md5
 
 insert:
   shards: # suggest bufDir on SSD
     - masterHost: 172.26.0.111
-      bufDir: /mnt/disk4/kunload/shard0
       mysqlPort: 14100
     - masterHost: 172.26.0.112
-      bufDir: /mnt/disk5/kunload/shard1
       mysqlPort: 14110
     - masterHost: 172.26.0.113
-      bufDir: /mnt/disk4/kunload/shard2
       mysqlPort: 14120
     - masterHost: 172.26.0.110
-      bufDir: /mnt/disk5/kunload/shard3
       mysqlPort: 14130
-
-  # no-password SSH login should be configured; change username below to what you configured
-  sshCmd: |
-    ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey root@${host} << EOF
-    ${command}
-    EOF
-  scpCmd: scp -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey ${fromFile} root@${host}:${toFile}
 
   # configure user and password below
   mysqlCmd: mysql --host=${host} --port=${port} --user=root --password=Transwarp! --execute="${sql}"
