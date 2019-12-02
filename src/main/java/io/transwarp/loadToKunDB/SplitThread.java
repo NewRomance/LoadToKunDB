@@ -150,7 +150,20 @@ public class SplitThread extends Thread {
                         segSizeArray[shardId] += size;
 
                         if (segSizeArray[shardId] >= segmentSize) {
-                            // TODO rotation
+                            // rotation
+                            System.out.println("rotating thread " + id + " shard " + shardId);
+
+                            bosArray[shardId].close();
+                            insertPool.submit(new InsertRunnable(
+                                    insertConfig,
+                                    getShardFilePath(shardId, segIndexArray[shardId]),
+                                    shardId,
+                                    "split-thread-" + id + "-shard-" + shardId + "-segment-" + segIndexArray[shardId] + ".txt"));
+
+                            segIndexArray[shardId] += 1;
+                            segSizeArray[shardId] = 0;
+                            String shardFileName = getShardFilePath(shardId, segIndexArray[shardId]);
+                            bosArray[shardId] = new BufferedOutputStream(new FileOutputStream(shardFileName), (1<<20) * 16) ;
                         }
                     }
 
@@ -219,37 +232,38 @@ public class SplitThread extends Thread {
 
         @Override
         public void run() {
-            System.out.println("[" + toFileName + "] will transfer and insert");
+            System.out.println("[" + fromFile + "] will transfer and insert");
 
             SplitTextConfig.InsertConfig.Shard shard = insertConfig.shards.get(shardId);
             String masterHost = shard.masterHost;
-            String toFile = shard.bufDir + "/" + toFileName;
+        //    String toFile = shard.bufDir + "/" + toFileName;
 
-            String sshTpl = insertConfig.sshCmd.replace("${host}", masterHost);
+          //  String sshTpl = insertConfig.sshCmd.replace("${host}", masterHost);
+          //  String sshTpl = insertConfig.sshCmd.replace("${host}", "172.26.0.110");
 
             // remote make dir
-            String mkDirCmd = "mkdir -p " + shard.bufDir;
-            execCommand(sshTpl.replace("${command}", mkDirCmd));
+          //  String mkDirCmd = "mkdir -p " + shard.bufDir;
+          //  execCommand(sshTpl.replace("${command}", mkDirCmd));
 
             // scp
-            String scpCmd = insertConfig.scpCmd
-                .replace("${fromFile}", fromFile)
-                .replace("${host}", masterHost)
-                .replace("${toFile}", toFile);
-            execCommand(scpCmd);
+//            String scpCmd = insertConfig.scpCmd
+//                .replace("${fromFile}", fromFile)
+//                .replace("${host}", "172.26.0.110")
+//                .replace("${toFile}", toFile);
+//            execCommand(scpCmd);
 
             // execute load data sql
-            String sql = insertConfig.sql.replace("${infile}", toFile);
+            String sql = insertConfig.sql.replace("${infile}", fromFile);
             String mysqlCmd = insertConfig.mysqlCmd
                 .replace("${host}", masterHost)
                 .replace("${port}", Integer.toString(shard.mysqlPort))
                 .replace("${sql}", sql);
-            execCommand(sshTpl.replace("${command}", mysqlCmd));
+            execCommand(mysqlCmd);
         }
 
         private void execCommand(String command) {
             try {
-                System.out.println("[" + toFileName + "] execCommand: " + maskPassword(command));
+                System.out.println("[" + fromFile + "] execCommand: " + maskPassword(command));
 
                 long start = System.currentTimeMillis();
 
@@ -258,22 +272,22 @@ public class SplitThread extends Thread {
 
                 proc.getOutputStream().close();
                 StreamGobbler errorGobbler =
-                    new StreamGobbler(proc.getErrorStream(), "[" + toFileName + "] ERROR");
+                    new StreamGobbler(proc.getErrorStream(), "[" + fromFile + "] ERROR");
                 StreamGobbler outputGobbler = new
-                    StreamGobbler(proc.getInputStream(), "[" + toFileName + "] OUTPUT");
+                    StreamGobbler(proc.getInputStream(), "[" + fromFile + "] OUTPUT");
                 errorGobbler.start();
                 outputGobbler.start();
 
                 int exitVal = proc.waitFor();
                 long took = System.currentTimeMillis() - start;
-                System.out.println("[" + toFileName + "] ExitValue: " + exitVal + " (" + took + " ms)");
+                System.out.println("[" + fromFile + "] ExitValue: " + exitVal + " (" + took + " ms)");
 
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
-        private static final Pattern PasswordPattern = Pattern.compile("-p\\S+");
+        private static final Pattern PasswordPattern = Pattern.compile("-p[^o]\\S+");
 
         private String maskPassword(String command) {
             return PasswordPattern.matcher(command).replaceAll("-p***");
